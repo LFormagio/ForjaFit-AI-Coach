@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ForjaFit - Simulador do AI Coach</title>
+  <style>
+    * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    body { background-color: #ece5dd; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+    .chat-container { width: 400px; height: 90vh; background: #fff; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); display: flex; flex-direction: column; overflow: hidden; }
+    .header { background: #075e54; color: white; padding: 15px; font-weight: bold; font-size: 1.2rem; display: flex; justify-content: space-between; align-items: center; }
+    .status { font-size: 0.8rem; font-weight: normal; color: #dcf8c6; }
+    .messages { flex: 1; padding: 20px; overflow-y: auto; background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png'); display: flex; flex-direction: column; gap: 10px; }
+    .msg { max-width: 80%; padding: 10px; border-radius: 8px; line-height: 1.4; word-wrap: break-word; }
+    .bot { background: #fff; align-self: flex-start; border-top-left-radius: 0; }
+    .user { background: #dcf8c6; align-self: flex-end; border-top-right-radius: 0; }
+    .input-area { display: flex; padding: 10px; background: #f0f0f0; }
+    .input-area input { flex: 1; padding: 12px; border: none; border-radius: 20px; outline: none; font-size: 1rem; }
+    .input-area button { background: #25d366; color: white; border: none; padding: 10px 15px; margin-left: 10px; border-radius: 50%; cursor: pointer; font-weight: bold; }
+    
+    .config-modal { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; flex-direction: column; color: white; z-index: 10; padding: 20px; }
+    .config-modal div { background: #fff; color: #333; padding: 30px; border-radius: 10px; max-width: 500px; text-align: center; }
+    .config-modal input { width: 100%; padding: 10px; margin: 15px 0; font-size: 1rem; }
+    .config-modal button { background: #075e54; color: white; border: none; padding: 10px 20px; font-size: 1rem; cursor: pointer; border-radius: 5px; }
+    .typing { font-size: 0.8rem; color: #888; align-self: flex-start; display: none; margin-top: -5px;}
+  </style>
+</head>
+<body>
+
+  <!-- Modal Inicial para Chave da API -->
+  <div class="config-modal" id="configModal">
+    <div>
+      <h2>Vincular Inteligência (OpenAI)</h2>
+      <p>Para o Agente ter vida e testarmos sua responsividade agora mesmo no navegador, precisamos conectar a inteligência dele copiando uma <b>API Key da OpenAI</b>.</p>
+      <input type="password" id="apiKeyInput" placeholder="Sua chave: sk-proj-..." />
+      <button onclick="startSimulation()">Iniciar Simulação com IA</button>
+      <br><br>
+      <button onclick="startMockSimulation()" style="background: #e0e0e0; color: #333; font-size: 0.9rem; padding: 8px 15px;">Apenas testar telas (Sem Chave)</button>
+      <p style="font-size: 0.8rem; margin-top: 15px; color: #666;">(Sua chave roda só aqui no seu navegador e em nenhum outro lugar).</p>
+    </div>
+  </div>
+
+  <div class="chat-container">
+    <div class="header">
+      ForjaFit AI Coach 
+      <span class="status" id="botStatus">Online</span>
+    </div>
+    <div class="messages" id="chatArea">
+      <!-- Mensagens aparecerão aqui -->
+    </div>
+    <div class="typing" id="typingIndicator">O treinador está digitando...</div>
+    <div class="input-area">
+      <input type="text" id="userInput" placeholder="Digite uma mensagem..." onkeydown="if(event.key === 'Enter') sendMessage()" disabled />
+      <button onclick="sendMessage()" id="sendBtn" disabled>➤</button>
+    </div>
+  </div>
+
+  <script>
+    let openAiKey = '';
+    // Simulando o State Machine do Controller
+    let state = 'LEAD'; 
+    let selectedTone = 'MENTOR';
+    let fitnessContextStr = '';
+
+    let isMockMode = false;
+
+    function startMockSimulation() {
+      isMockMode = true;
+      document.getElementById('configModal').style.display = 'none';
+      document.getElementById('userInput').disabled = false;
+      document.getElementById('sendBtn').disabled = false;
+
+      setTimeout(() => {
+        addMessage("Olá! Sou o ForjaFit, seu AI Coach de Treino! 💪\nPara começarmos, qual perfil de treinador funciona melhor para cobrarmos sua rotina?\n\n1️⃣ O Amigão: Me motive com emojis e pegue leve.\n2️⃣ O Sargento: Zero desculpas. Tolerância zero e militar.\n3️⃣ O Mentor: Prático, focado na solução do problema.", "bot");
+        state = 'ONBOARDING_TONE';
+      }, 500);
+    }
+
+    function startSimulation() {
+      const key = document.getElementById('apiKeyInput').value;
+      if(!key.startsWith('sk-')) { alert("Sua chave precisa começar com sk-"); return; }
+      openAiKey = key;
+      document.getElementById('configModal').style.display = 'none';
+      document.getElementById('userInput').disabled = false;
+      document.getElementById('sendBtn').disabled = false;
+
+      // Dispara a primeira mensagem da state machine (Lead Start)
+      setTimeout(() => {
+        addMessage("Olá! Sou o ForjaFit, seu AI Coach de Treino! 💪\nPara começarmos, qual perfil de treinador funciona melhor para cobrarmos sua rotina?\n\n1️⃣ O Amigão: Me motive com emojis e pegue leve.\n2️⃣ O Sargento: Zero desculpas. Tolerância zero e militar.\n3️⃣ O Mentor: Prático, focado na solução do problema.", "bot");
+        state = 'ONBOARDING_TONE';
+      }, 500);
+    }
+
+    function addMessage(text, sender) {
+      const chatArea = document.getElementById('chatArea');
+      const msgDiv = document.createElement('div');
+      msgDiv.className = `msg ${sender}`;
+      // Tratando quebra de linha visual
+      msgDiv.innerHTML = text.replace(/\n/g, '<br/>'); 
+      chatArea.appendChild(msgDiv);
+      chatArea.scrollTop = chatArea.scrollHeight;
+    }
+
+    async function sendMessage() {
+      const input = document.getElementById('userInput');
+      const text = input.value.trim();
+      if (!text) return;
+
+      addMessage(text, 'user');
+      input.value = '';
+      document.getElementById('typingIndicator').style.display = 'block';
+
+      // Roteamento da State Machine
+      setTimeout(async () => {
+        if (state === 'ONBOARDING_TONE') {
+          if (text === '1') selectedTone = 'AMIGAO';
+          else if (text === '2') selectedTone = 'SARGENTO';
+          else selectedTone = 'MENTOR';
+
+          state = 'ONBOARDING_PHYSICAL';
+          addMessage("Excelente escolha! Agora me diga numa só mensagem:\n- Qual seu maior objetivo? (hipertrofia, secar)\n- Quantos dias consegue treinar na semana?\n- Tem alguma dor no corpo ou limitação?", "bot");
+          document.getElementById('typingIndicator').style.display = 'none';
+          
+        } else if (state === 'ONBOARDING_PHYSICAL') {
+          // Regra Técnica Determinística: Bloco para impedir criação de planilha incompleta
+          let infoFaltante = [];
+          const textLower = text.toLowerCase();
+          if (!/(hipertrofi|seca|emagrece|forç|defin)/.test(textLower)) infoFaltante.push("Seu objetivo principal");
+          if (!/\d/.test(textLower) && !/(todo|um|dois|tres|quatro|cinco|seis|sete)/.test(textLower)) infoFaltante.push("Quantos dias na semana");
+          if (!/(dor|nada|não|nenhuma|joelho|lombar)/.test(textLower)) infoFaltante.push("Tem restrição ou dores");
+
+          if (infoFaltante.length > 0) {
+            addMessage(`[State Machine Block] - Opa, como seu treinador eu reparei que esquecemos de alinhar alguns pontos para a nossa ficha:\n\n- ${infoFaltante.join("\n- ")}\n\nPode me especificar isso primeiro pra eu montar o arquivo de forma segura?`, "bot");
+            document.getElementById('typingIndicator').style.display = 'none';
+            return; // Mantém no estado ONBOARDING_PHYSICAL aguardando os dados
+          }
+
+          fitnessContextStr = text;
+          state = 'TRIAL';
+          
+          await callOpenAI(
+            `Você é um AI Personal atuando no WhatsApp. Tom escolhido: ${selectedTone}.
+            O aluno acabou de informar sua rotina e dores perfeitamente: "${fitnessContextStr}".
+            Sua missão: Escreva a resposta recepcionando ele. MOSTRE um arquivo/ficha de treino completa, com exercícios e repetições reais baseado nos dados informados.`
+          );
+
+        } else if (state === 'TRIAL') {
+          // Fase conversacional nativa de treinos
+          await callOpenAI(
+            `Atue como AI Personal no WhatsApp com o Tom: ${selectedTone}.
+            Situação do aluno atual: "${fitnessContextStr}".
+            O aluno mandou essa mensagem pra você (responda de acordo com a sua persona): "${text}"`
+          );
+        }
+      }, 600);
+    }
+
+    // Camada de Acesso AI Mockando o llm.service.ts
+    async function callOpenAI(systemPrompt) {
+      if (isMockMode) {
+        setTimeout(() => {
+          document.getElementById('typingIndicator').style.display = 'none';
+          if (state === 'TRIAL' && systemPrompt.includes("você (responda de acordo")) {
+            if (selectedTone === 'SARGENTO') addMessage("Você acha que desculpa queima caloria, guerreiro? Cai pra flexão agora! 💪😠", 'bot');
+            else if (selectedTone === 'AMIGAO') addMessage("Poxa, entendo que foi difícil hoje! Amanhã a gente corre atrás do prejuízo, viu? Não desanima! 🤩🏃‍♂️", 'bot');
+            else addMessage("Faltar acontece. O problema é faltar dois dias seguidos. Qual o seu plano de ação para treinar amanhã sem desculpas? 📋", 'bot');
+          } else {
+             addMessage(`[MOCK - ${selectedTone}] Entendido! Eu montei sua ficha Full Body pra semana toda. Bora botar o shape! O que achou? 🔥`, 'bot');
+          }
+        }, 1500);
+        return;
+      }
+
+      try {
+        const res = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${openAiKey}`
+          },
+          body: JSON.stringify({
+            model: "gpt-4o-mini",
+            messages: [{ role: "system", content: systemPrompt }]
+          })
+        });
+        
+        const data = await res.json();
+        const botResponse = data.choices[0].message.content;
+        
+        document.getElementById('typingIndicator').style.display = 'none';
+        addMessage(botResponse, 'bot');
+      } catch (err) {
+        document.getElementById('typingIndicator').style.display = 'none';
+        addMessage(`Houve um erro de conexão com a OpenAI. Verifique se a chave de API tem créditos! Erro: ${err.message}`, 'bot');
+      }
+    }
+  </script>
+</body>
+</html>
