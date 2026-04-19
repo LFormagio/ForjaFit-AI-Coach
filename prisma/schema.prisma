@@ -1,0 +1,47 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String          @id @default(uuid())
+  phoneNumber    String          @unique
+  name           String?
+  status         String          @default("LEAD") // LEAD, TRIAL, ACTIVE
+  toneOfVoice    String?         // AMIGAO, SARGENTO, MENTOR
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  fitnessContext FitnessContext?
+  workouts       Workout[]
+}
+
+model FitnessContext {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id])
+  objective    String   // HIPERTROFIA, EMAGRECIMENTO, MANUTENCAO
+  experience   String   // INICIANTE, INTERMEDIARIO, AVANCADO
+  daysPerWeek  Int      
+  limitations  String?
+  equipments   String?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Workout {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  contentJson String   // JSON rígido contendo os exercícios gerados
+  isCompleted Boolean  @default(false)
+  feedback    String?
+  scheduledFor DateTime
+
+  createdAt   DateTime @default(now())
+}
